@@ -49,6 +49,22 @@ def _build_headers() -> dict:
     }
 
 
+_DEMO_TRADES = [
+    {"politician": {"firstName": "Nancy", "lastName": "Pelosi", "party": "D", "chamber": "House"}, "issuer": {"ticker": "NVDA", "name": "NVIDIA Corporation"}, "txDate": "2026-05-28", "filedAfterDays": 41, "type": "buy", "value": 500000},
+    {"politician": {"firstName": "Tommy", "lastName": "Tuberville", "party": "R", "chamber": "Senate"}, "issuer": {"ticker": "LMT", "name": "Lockheed Martin Corp"}, "txDate": "2026-05-22", "filedAfterDays": 14, "type": "buy", "value": 250000},
+    {"politician": {"firstName": "Josh", "lastName": "Gottheimer", "party": "D", "chamber": "House"}, "issuer": {"ticker": "MSFT", "name": "Microsoft Corporation"}, "txDate": "2026-05-20", "filedAfterDays": 16, "type": "sell", "value": 100000},
+    {"politician": {"firstName": "Dan", "lastName": "Crenshaw", "party": "R", "chamber": "House"}, "issuer": {"ticker": "XOM", "name": "Exxon Mobil Corp"}, "txDate": "2026-05-15", "filedAfterDays": 21, "type": "buy", "value": 75000},
+    {"politician": {"firstName": "Mark", "lastName": "Warner", "party": "D", "chamber": "Senate"}, "issuer": {"ticker": "AMZN", "name": "Amazon.com Inc"}, "txDate": "2026-05-12", "filedAfterDays": 24, "type": "sell_partial", "value": 1000000},
+    {"politician": {"firstName": "Mike", "lastName": "Quigley", "party": "D", "chamber": "House"}, "issuer": {"ticker": "AAPL", "name": "Apple Inc"}, "txDate": "2026-05-10", "filedAfterDays": 26, "type": "sell", "value": 50000},
+    {"politician": {"firstName": "Roger", "lastName": "Wicker", "party": "R", "chamber": "Senate"}, "issuer": {"ticker": "BA", "name": "Boeing Co"}, "txDate": "2026-05-08", "filedAfterDays": 29, "type": "buy", "value": 200000},
+    {"politician": {"firstName": "Ro", "lastName": "Khanna", "party": "D", "chamber": "House"}, "issuer": {"ticker": "AMD", "name": "Advanced Micro Devices"}, "txDate": "2026-05-05", "filedAfterDays": 31, "type": "buy", "value": 15000},
+    {"politician": {"firstName": "Bill", "lastName": "Hagerty", "party": "R", "chamber": "Senate"}, "issuer": {"ticker": "JPM", "name": "JPMorgan Chase & Co"}, "txDate": "2026-05-01", "filedAfterDays": 35, "type": "buy", "value": 500000},
+    {"politician": {"firstName": "Alexandria", "lastName": "Ocasio-Cortez", "party": "D", "chamber": "House"}, "issuer": {"ticker": "TSLA", "name": "Tesla Inc"}, "txDate": "2026-04-28", "filedAfterDays": 38, "type": "sell", "value": 15000},
+    {"politician": {"firstName": "Richard", "lastName": "Burr", "party": "R", "chamber": "Senate"}, "issuer": {"ticker": "PFE", "name": "Pfizer Inc"}, "txDate": "2026-04-25", "filedAfterDays": 41, "type": "sell", "value": 100000},
+    {"politician": {"firstName": "Shelley", "lastName": "Capito", "party": "R", "chamber": "Senate"}, "issuer": {"ticker": "NEE", "name": "NextEra Energy Inc"}, "txDate": "2026-04-20", "filedAfterDays": 46, "type": "buy", "value": 50000},
+]
+
+
 def fetch_trades(
     page_size: int = 50,
     party: Optional[str] = None,
@@ -56,8 +72,23 @@ def fetch_trades(
     ticker: Optional[str] = None,
     politician: Optional[str] = None,
     days_back: int = 30,
+    demo: bool = False,
 ) -> list[dict]:
     """Fetch recent congressional trades from Capitol Trades public API."""
+    if demo:
+        log.info("Demo mode – using sample data (no network required)")
+        trades = list(_DEMO_TRADES)
+        if party:
+            trades = [t for t in trades if t["politician"]["party"] == party.upper()]
+        if trade_type:
+            trades = [t for t in trades if t["type"].startswith(trade_type.lower())]
+        if ticker:
+            trades = [t for t in trades if t["issuer"]["ticker"] == ticker.upper()]
+        if politician:
+            needle = politician.lower()
+            trades = [t for t in trades if needle in t["politician"]["lastName"].lower() or needle in t["politician"]["firstName"].lower()]
+        return trades[:page_size]
+
     since = (date.today() - timedelta(days=days_back)).strftime("%Y-%m-%d")
 
     params: dict = {"pageSize": page_size, "page": 0, "sort": "-txDate"}
@@ -335,6 +366,11 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("TELEGRAM_NOTIFY", "false").lower() == "true",
         help="Send a Telegram summary of the trades found",
     )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Run with built-in sample data (no network needed)",
+    )
     return parser.parse_args()
 
 
@@ -342,7 +378,8 @@ def main() -> None:
     args = parse_args()
 
     log.info(
-        "Fetching trades: last %d days, limit %d ...", args.days, args.limit
+        "Fetching trades: last %d days, limit %d %s...",
+        args.days, args.limit, "[DEMO] " if args.demo else "",
     )
     trades = fetch_trades(
         page_size=args.limit,
@@ -351,6 +388,7 @@ def main() -> None:
         ticker=args.ticker,
         politician=args.politician,
         days_back=args.days,
+        demo=args.demo,
     )
 
     if not trades:
